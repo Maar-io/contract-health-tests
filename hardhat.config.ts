@@ -23,16 +23,14 @@ const config: HardhatUserConfig = {
     },
     sepolia: {
       accounts: [process.env.TESTNET_PRIVATE_KEY || ""],
-      url: "https://sepolia-01.astar.network/"
+      url: "https://sepolia-01.astar.network/",
+      chainId: 11155111,
     },
     osaki: {
       accounts: [process.env.TESTNET_PRIVATE_KEY || ""],
-      url: "http://rpc.stg.hypersonicl2.com/"
+      url: "http://rpc.stg.hypersonicl2.com/",
+      chainId: 200200,
     },
-    zkyoto: {
-      accounts: [process.env.TESTNET_PRIVATE_KEY || ""],
-      url: "https://rpc.startale.com/zkyoto"
-    }
   },
 }
 export default config;
