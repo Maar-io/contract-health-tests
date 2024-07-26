@@ -28,6 +28,7 @@ const StandardBridgeABI = [
 const OptimismPortalABI = [
     "event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to)",
     "function version() external view returns (string)",
+    "function proveWithdrawalTransaction(Types.WithdrawalTransaction memory _tx, uint256 _l2OutputIndex, Types.OutputRootProof calldata _outputRootProof,bytes[] calldata _withdrawalProof)"
 ]
 const L2StandardBridgeABI = [
     "event DepositFinalized(address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes extraData)",
@@ -169,9 +170,23 @@ describe("Withdraw ETH from L2", function () {
         const optimismPortal = new hre.ethers.Contract(SepoliaOptimismPortalAddress, OptimismPortalABI, l1Provider);
         console.log(`Connected to L1 bridge contract: ${optimismPortal.target}, version: ${await optimismPortal.version()}`);
 
+        // Call ProveWithdrawal function TODO
+        const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
 
-        // Check the events on L2
-        await pollForEvents(optimismPortal, user.address);
+        await tx.wait();
+        // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+    
+        // check withdrawal events on L1
+        console.log(`proveWithdrawal Transaction on L1 hash: ${tx.hash}`);
+        const receipt = await l1Provider.getTransactionReceipt(tx.hash);
+        if (!receipt) {
+            throw new Error(`Failed to fetch transaction receipt for hash: ${tx.hash}`);
+        }
+
+        expect(receipt?.logs.length).to.be.equal(5);
+        // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
+        await expect(tx).to.emit(optimismPortal, "WithdrawalProved").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
+        console.log(`WithdrawalInitiated event emitted`);
 
         console.log(`Withdrawal finalized on L1`);
     });
