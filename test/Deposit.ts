@@ -13,7 +13,7 @@ let eventReceived = false; // Flag to indicate if the event has been received
 
 const L1StandardBridgeProxyAddress = "0x5a6d4aAD601fE380995d93475A8b7f764F703eE4";
 const L2bridgeContractAddress = "0x4200000000000000000000000000000000000010";
-const AMOUNT = 100000000000000; // 0.0001 ETH
+const AMOUNT = BigInt("10000000000000000"); // 0.0001 ETH
 let initialL2BlockNumber = 0;
 
 const StandardBridgeABI = [
