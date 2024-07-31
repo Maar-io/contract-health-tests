@@ -2,6 +2,7 @@
 
 import { expect } from "chai";
 import * as hre from "hardhat";
+import { Contract } from "ethers";
 
 const l1Provider = new hre.ethers.JsonRpcProvider(process.env.L1_RPC_URL);
 const l2Provider = new hre.ethers.JsonRpcProvider(process.env.L2_RPC_URL);
@@ -14,20 +15,21 @@ const L2bridgeContractAddress = "0x4200000000000000000000000000000000000010";
 const AMOUNT = BigInt("1000000000000000000"); // 1 ERC20 token
 let initialL2BlockNumber = 0;
 const l1Token = "0x5589BB8228C07c4e15558875fAf2B859f678d129"
-const l2Token = "0xc55dEc4e56dE7184E96C846258bE748954E6630d"
+const l2Token = "0x10c325046d1Ad3628ab13F3E0Bc6edF2E11912d4"
 
 const StandardBridgeABI = [
     "function bridgeERC20To(address _localToken, address _remoteToken,address _to,uint256 _amount,uint32 _minGasLimit,bytes _extraData)",
     "event ETHDepositInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData)",
     "event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData)",
     "event ERC20DepositInitiated(address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes extraData)",
-    "event ERC20BridgeInitiated (address indexed localToken, address indexed remoteToken, address indexed from, address to, uint256 amount, bytes extraData)"
+    "event ERC20BridgeInitiated(address indexed localToken, address indexed remoteToken, address indexed from, address to, uint256 amount, bytes extraData)",
+    "event ERC20BridgeFinalized(address indexed arg0, address indexed arg1, address indexed arg2, address arg3, uint256 arg4, bytes arg5)",
 ];
 const erc20ABI = [
     "function allowance(address _owner, address _spender) view returns (uint256 remaining)",
     "function approve(address _spender, uint256 _value) returns (bool success)",
     "function balanceOf(address _owner) view returns (uint256 balance)",
-    "function faucet() nonpayable"
+    "function faucet()"
 ];
 const L2StandardBridgeABI = [
     "event DepositFinalized(address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes extraData)",
@@ -63,6 +65,9 @@ async function depositERC20onL1 () {
     const allowance = await l1ERC20.allowance(user.address, L1StandardBridgeProxyAddress)
     expect(allowance).to.be.at.least(AMOUNT);
 
+    // Get L2 current block number. we will monitor L2 deposit events from this block number
+    initialL2BlockNumber = await l2Provider.getBlockNumber();
+
     // Deposit ERC20 token on L1
     console.log(`Depositing ERC20 token`);
     const bridgeL1 = new hre.ethers.Contract(L1StandardBridgeProxyAddress, StandardBridgeABI, user);
@@ -83,55 +88,55 @@ async function depositERC20onL1 () {
 }
 
 
-// async function pollForEvents (bridgeL2: Contract, userAddress: string) {
+async function pollForEvents (bridgeL2: Contract, userAddress: string) {
 
-//     if (eventReceived) {
-//         console.log("DepositFinalized event received. Stopping further polling.");
-//         return; // Exit the function if the event has been received.
-//     }
+    if (eventReceived) {
+        console.log("DepositFinalized event received. Stopping further polling.");
+        return; // Exit the function if the event has been received.
+    }
 
-//     let lastBlockNumber = initialL2BlockNumber;
-//     try {
-//         const currentBlockNumber = await l2Provider.getBlockNumber();
-//         console.log(`Checking for DepositFinalized event in block ${lastBlockNumber} to ${currentBlockNumber}`);
-//         const events = await bridgeL2.queryFilter("DepositFinalized", lastBlockNumber, currentBlockNumber);
+    let lastBlockNumber = initialL2BlockNumber;
+    try {
+        const currentBlockNumber = await l2Provider.getBlockNumber();
+        console.log(`Checking for DepositFinalized event in block ${lastBlockNumber} to ${currentBlockNumber}`);
+        const events = await bridgeL2.queryFilter("DepositFinalized", lastBlockNumber, currentBlockNumber);
 
-//         // parse received events
-//         events.forEach((event) => {
-//             let toAddress = '0x' + event.data.substring(26, 66);
-//             toAddress = toAddress.toLowerCase();
-//             const amountHex = event.data.substring(66, 130);
-//             const amount = BigInt('0x' + amountHex);
-//             console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
-//             if (amount === BigInt(AMOUNT) && toAddress === userAddress.toLowerCase()) {
-//                 console.log(`DepositFinalized Matched`);
-//                 eventReceived = true; // Set the flag to true
-//                 return;
-//             }
-//             console.log(`L2 Transaction Hash: ${event.transactionHash}`);
-//         });
+        // parse received events
+        events.forEach((event) => {
+            let toAddress = '0x' + event.data.substring(26, 66);
+            toAddress = toAddress.toLowerCase();
+            const amountHex = event.data.substring(66, 130);
+            const amount = BigInt('0x' + amountHex);
+            console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
+            if (amount === BigInt(AMOUNT) && toAddress === userAddress.toLowerCase()) {
+                console.log(`DepositFinalized Matched`);
+                eventReceived = true; // Set the flag to true
+                return;
+            }
+            console.log(`L2 Transaction Hash: ${event.transactionHash}`);
+        });
 
-//         // Update the last block number
-//         lastBlockNumber = currentBlockNumber + 1;
-//         initialL2BlockNumber = lastBlockNumber;
-//     } catch (error) {
-//         console.error("Error while polling for events:", error);
-//     } finally {
-//         // Schedule the next poll
-//         if (!eventReceived) {
-//             await wait(POLLING_INTERVAL);
-//             await pollForEvents(bridgeL2, userAddress);
-//         }
-//     }
+        // Update the last block number
+        lastBlockNumber = currentBlockNumber + 1;
+        initialL2BlockNumber = lastBlockNumber;
+    } catch (error) {
+        console.error("Error while polling for events:", error);
+    } finally {
+        // Schedule the next poll
+        if (!eventReceived) {
+            await wait(POLLING_INTERVAL);
+            await pollForEvents(bridgeL2, userAddress);
+        }
+    }
 
-// }
+}
 
 // Helper function to wait for a specified time
-// const wait = (ms: number): Promise<number> => {
-//     return new Promise((resolve) => setTimeout(resolve, ms));
-// };
+const wait = (ms: number): Promise<number> => {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+};
 
-describe("Deposit ETH on L1", function () {
+describe("Deposit ERC20 on L1", function () {
     it("Deposit ETH on L1", async function () {
         console.log(`Connected to L1 network: ${hre.network.config.chainId}`);
 
@@ -139,24 +144,23 @@ describe("Deposit ETH on L1", function () {
         console.log(`ERC20 Deposit initiated on L1`);
     });
 
-    // it("Receive ETH Deposit on L2", async function () {
-    //     this.timeout(240000); // Set timeout for this test case
+    it("Receive ERC20 Deposit on L2", async function () {
+        this.timeout(240000); // Set timeout for this test case
 
-    //     const networkL2 = await l2Provider.getNetwork();
-    //     console.log(`Connected to L2 network: ${networkL2.chainId}`);
+        const networkL2 = await l2Provider.getNetwork();
+        console.log(`Connected to L2 network: ${networkL2.chainId}`);
 
-    //     // Get the signer
-    //     const signers = await hre.ethers.getSigners();
-    //     const user = signers[0];
+        // Get the signer
+        const signers = await hre.ethers.getSigners();
+        const user = signers[0];
 
-    //     // Contract details
-    //     const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, l2Provider);
-    //     console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
+        // Contract details
+        const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, l2Provider);
+        console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
 
+        // Check the events on L2
+        await pollForEvents(bridgeL2, user.address);
 
-    //     // Check the events on L2
-    //     await pollForEvents(bridgeL2, user.address);
-
-    //     console.log(`Deposit finalized on L2`);
-    // });
+        console.log(`Deposit finalized on L2`);
+    });
 });
