@@ -1,4 +1,4 @@
-// npx hardhat test test/Deposit.ts --network sepolia
+// npx hardhat test test/DepositERC20.ts --network sepolia
 
 import { expect } from "chai";
 import * as hre from "hardhat";
@@ -36,14 +36,11 @@ const L2StandardBridgeABI = [
     "function version() external view returns (string)"
 ];
 
-async function depositERC20onL1 () {
+async function depositERC20onL1 (l1ERC20: Contract) {
 
     // Get the signer
     const signers = await hre.ethers.getSigners();
     const user = signers[0];
-
-    // Get ERC20 L1 contract
-    const l1ERC20 = new hre.ethers.Contract(l1Token, erc20ABI, user)
 
     // Check the ETH balance of the signer
     const balanceWei = await hre.ethers.provider.getBalance(user.address);
@@ -137,11 +134,28 @@ const wait = (ms: number): Promise<number> => {
 };
 
 describe("Deposit ERC20 on L1", function () {
-    it("Deposit ETH on L1", async function () {
-        console.log(`Connected to L1 network: ${hre.network.config.chainId}`);
+    let user: any;
+    let l1ERC20: Contract;
+    let l2ERC20: Contract;
+    this.beforeEach(async function () {
+        const signers = await hre.ethers.getSigners();
+        user = signers[0];
 
-        await depositERC20onL1();
-        console.log(`ERC20 Deposit initiated on L1`);
+        l1ERC20 = new hre.ethers.Contract(l1Token, erc20ABI, user)
+        l2ERC20 = new hre.ethers.Contract(l2Token, erc20ABI, user)
+
+    }
+    );
+
+    it("Deposit ETH on L1", async function () {
+        this.timeout(60000); // Set timeout for this test case
+
+        const l1ERC20Balance = (await l1ERC20.balanceOf(user.address)).toString()
+        console.log(`L1 network: ${hre.network.config.chainId}, ERC20 balance: ${l1ERC20Balance}`)
+
+        await depositERC20onL1(l1ERC20);
+        console.log(`✅ ERC20 Deposit initiated on L1`);
+
     });
 
     it("Receive ERC20 Deposit on L2", async function () {
@@ -154,13 +168,21 @@ describe("Deposit ERC20 on L1", function () {
         const signers = await hre.ethers.getSigners();
         const user = signers[0];
 
+        // get the ERC20 L2 balance
+        const l2ERC20Balance = (await l2ERC20.balanceOf(user.address)).toString()
+        console.log(`L2 network: ${networkL2.chainId}, ERC20 balance: ${l2ERC20Balance}`);
+
         // Contract details
         const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, l2Provider);
-        console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
+        // console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
+
 
         // Check the events on L2
         await pollForEvents(bridgeL2, user.address);
 
-        console.log(`Deposit finalized on L2`);
+        const l2ERC20BalanceAfter = (await l2ERC20.balanceOf(user.address)).toString()
+        console.log("L1 ERC20 balance: ", l2ERC20BalanceAfter)
+        console.log(`✅ Deposit finalized on L2, balance: '${l2ERC20BalanceAfter}'`);
+
     });
 });
