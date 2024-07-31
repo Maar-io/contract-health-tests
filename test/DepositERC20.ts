@@ -90,9 +90,7 @@ async function pollForEvents(bridgeL2: Contract, userAddress: string) {
             toAddress = toAddress.toLowerCase();
             const amountHex = event.data.substring(66, 130);
             const amount = BigInt('0x' + amountHex);
-            // console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
             if (amount === BigInt(AMOUNT) && toAddress === userAddress.toLowerCase()) {
-                // console.log(`DepositFinalized Matched`);
                 eventReceived = true; // Set the flag to true
                 return;
             }
@@ -111,7 +109,6 @@ async function pollForEvents(bridgeL2: Contract, userAddress: string) {
             await pollForEvents(bridgeL2, userAddress);
         }
     }
-
 }
 
 // Helper function to wait for a specified time
@@ -125,8 +122,7 @@ describe("Deposit ERC20 on L1", function () {
     this.beforeEach(async function () {
         const signers = await hre.ethers.getSigners();
         user = signers[0];
-    }
-    );
+    });
 
     it("Deposit ERC20 on L1", async function () {
         this.timeout(60000); // Set timeout for this test case
@@ -169,7 +165,7 @@ describe("Deposit ERC20 on L1", function () {
         const l2ERC20BalanceNewWei: bigint = await l2ERC20.balanceOf(user.address);
         const l2ERC20BalanceNew = hre.ethers.formatUnits(l2ERC20BalanceNewWei, 18);
         expect(l2ERC20BalanceNewWei).to.be.equal(BigInt(l2ERC20BalanceWei) + AMOUNT);
-        console.log(`✅ ERC20 deposit finalized on L2, new balance: '${l2ERC20BalanceNew}'`);
+        console.log(`✅ ERC20 deposit finalized on L2, new balance: ${l2ERC20BalanceNew}`);
 
     });
 });

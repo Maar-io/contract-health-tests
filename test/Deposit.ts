@@ -10,7 +10,6 @@ const l2Provider = new hre.ethers.JsonRpcProvider(process.env.L2_RPC_URL);
 const POLLING_INTERVAL = 10000; // 10 seconds
 let eventReceived = false; // Flag to indicate if the event has been received
 
-
 const L1StandardBridgeProxyAddress = "0x5a6d4aAD601fE380995d93475A8b7f764F703eE4";
 const L2bridgeContractAddress = "0x4200000000000000000000000000000000000010";
 const AMOUNT = BigInt("10000000000000000"); // 0.0001 ETH
@@ -27,18 +26,7 @@ const L2StandardBridgeABI = [
     "function version() external view returns (string)"
 ];
 
-async function depositETHonL1 () {
-    // Get the signer
-    const signers = await hre.ethers.getSigners();
-    const user = signers[0];
-
-    // Check the ETH balance of the signer
-    const balanceWei = await hre.ethers.provider.getBalance(user.address);
-    const balanceEther = hre.ethers.formatEther(balanceWei);
-    console.log(`Balance of ${user.address}: ${balanceEther} ETH`);
-    const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
-    expect(balanceEtherBigNumber).to.be.gt(0);
-
+async function depositETHonL1(user: any) {
     // Get L2 current block number. we will monitor L2 deposit events from this block number
     initialL2BlockNumber = await l2Provider.getBlockNumber();
 
@@ -57,41 +45,10 @@ async function depositETHonL1 () {
 
     expect(receipt?.logs.length).to.be.equal(5);
     await expect(tx).to.emit(bridgeL1, "ETHDepositInitiated").withArgs(user, user, AMOUNT, "0x");
-    console.log(`ETHDepositInitiated event emitted`);
     await expect(tx).to.emit(bridgeL1, "ETHBridgeInitiated").withArgs(user, user, AMOUNT, "0x");
-    console.log(`ETHBridgeInitiated event emitted`);
 }
 
-// This function is here for review purposes only. When used it does not capture any events.
-async function listenForEvent (bridgeL2: Contract, userAddress: string) {
-    // Set events filter
-    const eventFilter = await bridgeL2.filters["DepositFinalized"]();
-    console.log(`Event filter: ${JSON.stringify(eventFilter, null, 2)}`);
-
-    return new Promise((resolve, reject) => {
-        // Listen for the event
-        console.log("Listening for event:", eventFilter);
-        bridgeL2.on(eventFilter, (l1Token, l2Token, from, to, amount, extraData, event) => {
-            console.log(`DepositFinalized Event Detected:
-              - L1 Token: ${l1Token}
-              - L2 Token: ${l2Token}
-              - From: ${from}
-              - To: ${to}
-              - Amount: ${amount.toString()}
-              - Extra Data: ${extraData}`);
-            if (from === userAddress && to === userAddress && amount.eq(AMOUNT)) {
-                console.log("Found matching event:", event);
-                bridgeL2.removeAllListeners(eventFilter);
-                resolve(event);
-            }
-            else {
-                console.log("Event does not match the expected arguments.");
-            }
-        });
-    });
-}
-
-async function pollForEvents (bridgeL2: Contract, userAddress: string) {
+async function pollForEvents(bridgeL2: Contract, userAddress: string, eventName: string) {
 
     // Example event:
     // {"_type":"log","address":"0x4200000000000000000000000000000000000010",
@@ -108,15 +65,15 @@ async function pollForEvents (bridgeL2: Contract, userAddress: string) {
     // "transactionIndex":1}
 
     if (eventReceived) {
-        console.log("DepositFinalized event received. Stopping further polling.");
+        console.log(`${eventName} event received. Stopping further polling.`);
         return; // Exit the function if the event has been received.
     }
 
     let lastBlockNumber = initialL2BlockNumber;
     try {
         const currentBlockNumber = await l2Provider.getBlockNumber();
-        console.log(`Checking for DepositFinalized event in block ${lastBlockNumber} to ${currentBlockNumber}`);
-        const events = await bridgeL2.queryFilter("DepositFinalized", lastBlockNumber, currentBlockNumber);
+        console.log(`Checking for ${eventName} event in block ${lastBlockNumber} to ${currentBlockNumber}`);
+        const events = await bridgeL2.queryFilter(eventName, lastBlockNumber, currentBlockNumber);
 
         // parse received events
         events.forEach((event) => {
@@ -124,9 +81,7 @@ async function pollForEvents (bridgeL2: Contract, userAddress: string) {
             toAddress = toAddress.toLowerCase();
             const amountHex = event.data.substring(66, 130);
             const amount = BigInt('0x' + amountHex);
-            console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
             if (amount === BigInt(AMOUNT) && toAddress === userAddress.toLowerCase()) {
-                console.log(`DepositFinalized Matched`);
                 eventReceived = true; // Set the flag to true
                 return;
             }
@@ -142,7 +97,7 @@ async function pollForEvents (bridgeL2: Contract, userAddress: string) {
         // Schedule the next poll
         if (!eventReceived) {
             await wait(POLLING_INTERVAL);
-            await pollForEvents(bridgeL2, userAddress);
+            await pollForEvents(bridgeL2, userAddress, eventName);
         }
     }
 
@@ -154,31 +109,46 @@ const wait = (ms: number): Promise<number> => {
 };
 
 describe("Deposit ETH on L1", function () {
-    it("Deposit ETH on L1", async function () {
-        console.log(`Connected to L1 network: ${hre.network.config.chainId}`);
+    let user: any;
 
-        await depositETHonL1();
-        console.log(`Deposit initiated on L1`);
+    this.beforeEach(async function () {
+        const signers = await hre.ethers.getSigners();
+        user = signers[0];
+    });
+
+    it("Deposit ETH on L1", async function () {
+        // Check the ETH balance of the signer
+        const balanceWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceEther = hre.ethers.formatEther(balanceWei);
+        const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
+        expect(balanceEtherBigNumber).to.be.gt(0);
+        console.log(`L1 network: ${hre.network.config.chainId}, ETH balance ${balanceEther}`)
+
+        // Deposit ETH and bridge it to L2
+        await depositETHonL1(user);
+        const balanceNewWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceNewEther = hre.ethers.formatEther(balanceNewWei);
+        expect(balanceNewWei).to.be.lt(balanceWei);
+        console.log(`✅ ETH Deposit initiated on L1, new ETH balance: ${balanceNewEther}`);
     });
 
     it("Receive ETH Deposit on L2", async function () {
         this.timeout(240000); // Set timeout for this test case
 
-        const networkL2 = await l2Provider.getNetwork();
-        console.log(`Connected to L2 network: ${networkL2.chainId}`);
-
-        // Get the signer
-        const signers = await hre.ethers.getSigners();
-        const user = signers[0];
+        // Check the ETH balance of the signer
+        const balanceWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceEther = hre.ethers.formatEther(balanceWei);
+        console.log(`L1 network: ${hre.network.config.chainId}, ETH balance ${balanceEther}`)
 
         // Contract details
         const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, l2Provider);
-        console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
-
+        // console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
 
         // Check the events on L2
-        await pollForEvents(bridgeL2, user.address);
-
-        console.log(`Deposit finalized on L2`);
+        await pollForEvents(bridgeL2, user.address, "DepositFinalized");
+        const balanceNewWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceNewEther = hre.ethers.formatEther(balanceNewWei);
+        expect(balanceNewWei).to.be.gt(balanceWei);
+        console.log(`✅ ETH deposit finalized on L2, new L2 ETH balance: ${balanceNewEther}`);
     });
 });

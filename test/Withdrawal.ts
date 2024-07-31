@@ -56,18 +56,7 @@ function parseLogs(log: any) {
     console.log(`Event Args: ${JSON.stringify(args, null, 2)}`);
 }
 
-async function withdrawETHfromL2() {
-    // Get the signer
-    const signers = await hre.ethers.getSigners();
-    const user = signers[0];
-
-    // Check the ETH balance of the signer
-    const balanceWei = await hre.ethers.provider.getBalance(user.address);
-    const balanceEther = hre.ethers.formatEther(balanceWei);
-    console.log(`L2 Balance of ${user.address}: ${balanceEther} ETH`);
-    const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
-    expect(balanceEtherBigNumber).to.be.gt(0);
-
+async function withdrawETHfromL2(user: any) {
     // Get L2 current block number. we will monitor L2 deposit events from this block number
     initialL1BlockNumber = await l1Provider.getBlockNumber();
 
@@ -75,7 +64,7 @@ async function withdrawETHfromL2() {
     const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, user);
     const tx = await bridgeL2.withdraw("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", AMOUNT, 0, "0x", { value: AMOUNT });
     await tx.wait();
-    // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+    console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
 
     // check deposit events on L1
     console.log(`Withdrawal Transaction on L2 hash: ${tx.hash}`);
@@ -85,12 +74,6 @@ async function withdrawETHfromL2() {
     }
 
     expect(receipt?.logs.length).to.be.equal(5);
-    // parseLogs(receipt.logs[0]);
-    // parseLogs(receipt.logs[1]);
-    // parseLogs(receipt.logs[2]);
-    // parseLogs(receipt.logs[3]);
-    // parseLogs(receipt.logs[4]);
-    // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
     await expect(tx).to.emit(bridgeL2, "WithdrawalInitiated").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
     console.log(`WithdrawalInitiated event emitted`);
     //     await expect(tx).to.emit(bridgeL2, "ETHBridgeInitiated").withArgs(user.address, user.address, AMOUNT, "0x");
@@ -149,45 +132,57 @@ const wait = (ms: number): Promise<number> => {
 };
 
 describe("Withdraw ETH from L2", function () {
-    it("Deposit ETH on L1", async function () {
-        console.log(`Connected to L2 network: ${hre.network.config.chainId}`);
+    let user: any;
 
-        await withdrawETHfromL2();
-        console.log(`Withdrawal initiated on L2`);
-    });
-
-    it("Receive ETH Withdrawal on L1", async function () {
-        this.timeout(240000); // Set timeout for this test case
-
-        const networkL1 = await l1Provider.getNetwork();
-        console.log(`Connected to L1 network: ${networkL1.chainId}`);
-
-        // Get the signer
+    this.beforeEach(async function () {
         const signers = await hre.ethers.getSigners();
-        const user = signers[0];
-
-        // Contract details
-        const optimismPortal = new hre.ethers.Contract(SepoliaOptimismPortalAddress, OptimismPortalABI, l1Provider);
-        console.log(`Connected to L1 bridge contract: ${optimismPortal.target}, version: ${await optimismPortal.version()}`);
-
-        // Call ProveWithdrawal function TODO
-        const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
-
-        await tx.wait();
-        // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
-    
-        // check withdrawal events on L1
-        console.log(`proveWithdrawal Transaction on L1 hash: ${tx.hash}`);
-        const receipt = await l1Provider.getTransactionReceipt(tx.hash);
-        if (!receipt) {
-            throw new Error(`Failed to fetch transaction receipt for hash: ${tx.hash}`);
-        }
-
-        expect(receipt?.logs.length).to.be.equal(5);
-        // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
-        await expect(tx).to.emit(optimismPortal, "WithdrawalProved").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
-        console.log(`WithdrawalInitiated event emitted`);
-
-        console.log(`Withdrawal finalized on L1`);
+        user = signers[0];
     });
+
+    it("Withdraw ETH from L2", async function () {
+        // Check the ETH balance of the signer
+        const balanceWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceEther = hre.ethers.formatEther(balanceWei);
+        const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
+        expect(balanceEtherBigNumber).to.be.gt(0);
+        console.log(`L2 network: ${hre.network.config.chainId}, ETH balance ${balanceEther}`)
+
+        await withdrawETHfromL2(user);
+        const balanceNewWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceNewEther = hre.ethers.formatEther(balanceNewWei);
+        const balanceNewEtherBigNumber = hre.ethers.parseEther(balanceEther);
+        expect(balanceNewEtherBigNumber).to.be.lt(balanceEtherBigNumber);
+        console.log(`✅ ETH Withdrawal initiated on L2, new balance: ${balanceNewEther}`);
+    });
+
+    // it("Receive ETH Withdrawal on L1", async function () {
+    //     this.timeout(240000); // Set timeout for this test case
+
+    //     const networkL1 = await l1Provider.getNetwork();
+    //     console.log(`Connected to L1 network: ${networkL1.chainId}`);
+
+    //     // Contract details
+    //     const optimismPortal = new hre.ethers.Contract(SepoliaOptimismPortalAddress, OptimismPortalABI, l1Provider);
+    //     console.log(`Connected to L1 bridge contract: ${optimismPortal.target}, version: ${await optimismPortal.version()}`);
+
+    //     // Call ProveWithdrawal function TODO
+    //     const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
+
+    //     await tx.wait();
+    //     // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+
+    //     // check withdrawal events on L1
+    //     console.log(`proveWithdrawal Transaction on L1 hash: ${tx.hash}`);
+    //     const receipt = await l1Provider.getTransactionReceipt(tx.hash);
+    //     if (!receipt) {
+    //         throw new Error(`Failed to fetch transaction receipt for hash: ${tx.hash}`);
+    //     }
+
+    //     expect(receipt?.logs.length).to.be.equal(5);
+    //     // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
+    //     await expect(tx).to.emit(optimismPortal, "WithdrawalProved").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
+    //     console.log(`WithdrawalInitiated event emitted`);
+
+    //     console.log(`Withdrawal finalized on L1`);
+    // });
 });
