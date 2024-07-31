@@ -4,7 +4,7 @@ import * as dotenv from "dotenv";
 
 dotenv.config({ path: __dirname + "/.env" });
 const TESTNET_PRIVATE_KEY = process.env.TESTNET_PRIVATE_KEY || "";
-console.log("TESTNET_PRIVATE_KEY set:", !!TESTNET_PRIVATE_KEY);
+// console.log("TESTNET_PRIVATE_KEY set:", !!TESTNET_PRIVATE_KEY);
 
 const config: HardhatUserConfig = {
   defaultNetwork: "hardhat",

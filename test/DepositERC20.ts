@@ -36,27 +36,13 @@ const L2StandardBridgeABI = [
     "function version() external view returns (string)"
 ];
 
-async function depositERC20onL1 (l1ERC20: Contract) {
-
-    // Get the signer
-    const signers = await hre.ethers.getSigners();
-    const user = signers[0];
-
-    // Check the ETH balance of the signer
-    const balanceWei = await hre.ethers.provider.getBalance(user.address);
-    const balanceEther = hre.ethers.formatEther(balanceWei);
-    console.log(`ETH Balance of ${user.address}: ${balanceEther} ETH`);
-    const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
-    expect(balanceEtherBigNumber).to.be.gt(0);
-
+async function depositERC20onL1(l1ERC20: Contract, user: any) {
     // Get some ERC20 tokens on L1
     // const fetchTx = await l1ERC20.faucet()
     // await fetchTx.wait()
-    const l1ERC20Balance = (await l1ERC20.balanceOf(user.address)).toString()
-    console.log("L1 ERC20 balance: ", l1ERC20Balance)
 
     // Approve the ERC20 token for the bridge
-    console.log(`Approving ERC20 token for the bridge`)
+    // console.log(`Approving ERC20 token for the bridge`)
     const approveTx = await l1ERC20.approve(L1StandardBridgeProxyAddress, AMOUNT)
     await approveTx.wait()
     const allowance = await l1ERC20.allowance(user.address, L1StandardBridgeProxyAddress)
@@ -66,14 +52,14 @@ async function depositERC20onL1 (l1ERC20: Contract) {
     initialL2BlockNumber = await l2Provider.getBlockNumber();
 
     // Deposit ERC20 token on L1
-    console.log(`Depositing ERC20 token`);
+    // console.log(`Depositing ERC20 token`);
     const bridgeL1 = new hre.ethers.Contract(L1StandardBridgeProxyAddress, StandardBridgeABI, user);
     const depositTx = await bridgeL1.bridgeERC20To(l1Token, l2Token, user.address, AMOUNT, 3000000, "0x");
     await depositTx.wait();
     // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
 
     // check deposit events on L1
-    console.log(`Deposit Transaction on L1 hash: ${depositTx.hash}`);
+    console.log(`Deposit ERC20 Transaction on L1, hash: ${depositTx.hash}`);
     const receipt = await l1Provider.getTransactionReceipt(depositTx.hash);
     if (!receipt) {
         throw new Error(`Failed to fetch transaction receipt for hash: ${depositTx.hash}`);
@@ -81,21 +67,21 @@ async function depositERC20onL1 (l1ERC20: Contract) {
 
     expect(receipt?.logs.length).to.be.equal(6);
     await expect(depositTx).to.emit(bridgeL1, "ERC20BridgeInitiated").withArgs(l1Token, l2Token, user, user, AMOUNT, "0x");
-    console.log(`ERC20BridgeInitiated event emitted`);
+    // console.log(`ERC20BridgeInitiated event emitted`);
 }
 
 
-async function pollForEvents (bridgeL2: Contract, userAddress: string) {
+async function pollForEvents(bridgeL2: Contract, userAddress: string) {
 
     if (eventReceived) {
-        console.log("DepositFinalized event received. Stopping further polling.");
+        // console.log("DepositFinalized event received. Stopping further polling.");
         return; // Exit the function if the event has been received.
     }
 
     let lastBlockNumber = initialL2BlockNumber;
     try {
         const currentBlockNumber = await l2Provider.getBlockNumber();
-        console.log(`Checking for DepositFinalized event in block ${lastBlockNumber} to ${currentBlockNumber}`);
+        console.log(`Checking for DepositFinalized event in L2 block ${lastBlockNumber} to ${currentBlockNumber}`);
         const events = await bridgeL2.queryFilter("DepositFinalized", lastBlockNumber, currentBlockNumber);
 
         // parse received events
@@ -104,9 +90,9 @@ async function pollForEvents (bridgeL2: Contract, userAddress: string) {
             toAddress = toAddress.toLowerCase();
             const amountHex = event.data.substring(66, 130);
             const amount = BigInt('0x' + amountHex);
-            console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
+            // console.log(`DepositFinalized Detected for: ${toAddress}, ${amount}`);
             if (amount === BigInt(AMOUNT) && toAddress === userAddress.toLowerCase()) {
-                console.log(`DepositFinalized Matched`);
+                // console.log(`DepositFinalized Matched`);
                 eventReceived = true; // Set the flag to true
                 return;
             }
@@ -135,54 +121,55 @@ const wait = (ms: number): Promise<number> => {
 
 describe("Deposit ERC20 on L1", function () {
     let user: any;
-    let l1ERC20: Contract;
-    let l2ERC20: Contract;
+
     this.beforeEach(async function () {
         const signers = await hre.ethers.getSigners();
         user = signers[0];
-
-        l1ERC20 = new hre.ethers.Contract(l1Token, erc20ABI, user)
-        l2ERC20 = new hre.ethers.Contract(l2Token, erc20ABI, user)
-
     }
     );
 
-    it("Deposit ETH on L1", async function () {
+    it("Deposit ERC20 on L1", async function () {
         this.timeout(60000); // Set timeout for this test case
 
-        const l1ERC20Balance = (await l1ERC20.balanceOf(user.address)).toString()
-        console.log(`L1 network: ${hre.network.config.chainId}, ERC20 balance: ${l1ERC20Balance}`)
+        // Check the ETH balance of the signer
+        const balanceWei = await hre.ethers.provider.getBalance(user.address);
+        const balanceEther = hre.ethers.formatEther(balanceWei);
+        const balanceEtherBigNumber = hre.ethers.parseEther(balanceEther);
+        expect(balanceEtherBigNumber).to.be.gt(0);
 
-        await depositERC20onL1(l1ERC20);
-        console.log(`✅ ERC20 Deposit initiated on L1`);
+        // Check the ERC20 balance of the signer
+        const l1ERC20 = new hre.ethers.Contract(l1Token, erc20ABI, user)
+        const l1ERC20BalanceWei: bigint = await l1ERC20.balanceOf(user.address);
+        const l1ERC20Balance = hre.ethers.formatUnits(l1ERC20BalanceWei, 18);
+        console.log(`L1 network: ${hre.network.config.chainId}, ERC20 balance: ${l1ERC20Balance}, ETH balance ${balanceEther}`)
 
+        await depositERC20onL1(l1ERC20, user);
+        const l1ERC20BalanceNewWei: bigint = await l1ERC20.balanceOf(user.address);
+        const l1ERC20BalanceNew = hre.ethers.formatUnits(l1ERC20BalanceNewWei, 18);
+        expect(l1ERC20BalanceNewWei).to.be.equal(BigInt(l1ERC20BalanceWei) - AMOUNT);
+        console.log(`✅ ERC20 Deposit initiated on L1, new balance: ${l1ERC20BalanceNew}`);
     });
 
     it("Receive ERC20 Deposit on L2", async function () {
         this.timeout(240000); // Set timeout for this test case
 
+        // Check the ERC20 balance of the signer
         const networkL2 = await l2Provider.getNetwork();
-        console.log(`Connected to L2 network: ${networkL2.chainId}`);
-
-        // Get the signer
-        const signers = await hre.ethers.getSigners();
-        const user = signers[0];
-
-        // get the ERC20 L2 balance
-        const l2ERC20Balance = (await l2ERC20.balanceOf(user.address)).toString()
+        const l2ERC20 = new hre.ethers.Contract(l2Token, erc20ABI, l2Provider);
+        const l2ERC20BalanceWei: bigint = await l2ERC20.balanceOf(user.address);
+        const l2ERC20Balance = hre.ethers.formatUnits(l2ERC20BalanceWei, 18);
         console.log(`L2 network: ${networkL2.chainId}, ERC20 balance: ${l2ERC20Balance}`);
 
-        // Contract details
+        // Connect to bridge contract
         const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, l2Provider);
-        // console.log(`Connected to L2 bridge contract: ${bridgeL2.target}, version: ${await bridgeL2.version()}`);
-
 
         // Check the events on L2
         await pollForEvents(bridgeL2, user.address);
 
-        const l2ERC20BalanceAfter = (await l2ERC20.balanceOf(user.address)).toString()
-        console.log("L1 ERC20 balance: ", l2ERC20BalanceAfter)
-        console.log(`✅ Deposit finalized on L2, balance: '${l2ERC20BalanceAfter}'`);
+        const l2ERC20BalanceNewWei: bigint = await l2ERC20.balanceOf(user.address);
+        const l2ERC20BalanceNew = hre.ethers.formatUnits(l2ERC20BalanceNewWei, 18);
+        expect(l2ERC20BalanceNewWei).to.be.equal(BigInt(l2ERC20BalanceWei) + AMOUNT);
+        console.log(`✅ ERC20 deposit finalized on L2, new balance: '${l2ERC20BalanceNew}'`);
 
     });
 });
