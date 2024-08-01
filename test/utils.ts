@@ -5,19 +5,31 @@ export const L2_L1_MESSAGE_PASSER_ADDRESS = "0x420000000000000000000000000000000
 import { l2ToL1MessagePasserABI, optimismPortalABI, l2OutputOracleABI } from "@eth-optimism/contracts-ts";
 
 
-async function getBlockNumberOfLatestL2OutputProposal (l2OutputOracle: Contract) {
-    const blockNumberOfLatestL2OutputProposal = await l2OutputOracle.latestBlockNumber();
-    console.log(`Block number of latest L2 output proposal: ${blockNumberOfLatestL2OutputProposal}`);
-    return blockNumberOfLatestL2OutputProposal;
+
+async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Contract): Promise<number> {
+
+    console.log(`l2outputoracle: ${JSON.stringify(l2OutputOracle.address, null, 2)}`);
+    console.log('Entering getBlockNumberOfLatestL2OutputProposal');
+    try {
+        const blockNumber = await l2OutputOracle.latestBlockNumber();
+        console.log('Block number retrieved:', blockNumber);
+        return blockNumber;
+    } catch (error) {
+        console.error('Error in getBlockNumberOfLatestL2OutputProposal:', error);
+        throw error;
+    }
 }
 
 async function getWithdrawalL2OutputIndex (l2OutputOracle: Contract, blockNumber: bigint) {
+    console.log(`l2outputoracle: ${l2OutputOracle}`);
+    console.log(`getWithdrawalL2OutputIndex block number: ${blockNumber}`);
     const L2OutputIndex = await l2OutputOracle.getL2OutputIndexAfter(blockNumber);
     console.log(`L2 Output Index: ${L2OutputIndex}`);
     return L2OutputIndex;
 }
 
 async function getWithdrawalL2Output (l2OutputOracle: Contract, withdrawalL2OutputIndex: bigint) {
+    console.log(`getWithdrawalL2Output: ${withdrawalL2OutputIndex}`);
     const l2Output = await l2OutputOracle.getL2Output(withdrawalL2OutputIndex);
     console.log(`L2 Output: ${l2Output}`);
 
@@ -122,11 +134,33 @@ async function getBlockByNumber (provider: any, blockNumber: bigint) {
 export async function getProveParameters (
     l2OutputOracle: Contract,
     withdrawalForTx: WithdrawalMsg,
+    l1Provider: any,
     l2provider: any
 ) {
-    const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
-    const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
-    const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
+
+    const networkL1 = await l1Provider.getNetwork();
+    console.log(`Connected to L1 network: ${networkL1.chainId}`);
+    const SepoliaL2OutputOracleProxy = "0xBD56179F126b0fd54611Fb59FFc8230DE0210c38"; // Osaki related contract
+
+    // Contract details
+    const l2OutputOracle2 = new ethers.Contract(SepoliaL2OutputOracleProxy, l2OutputOracleABI, l1Provider);
+    console.log(`Connected to L1 bridge contract: ${l2OutputOracle.target}`);
+
+    // console.log(`getProveParameters for tx: ${JSON.stringify(withdrawalForTx.sender, null, 2)}`);
+    // const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
+    // const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
+    // const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
+    console.log('Getting block number of latest L2 output proposal');
+    const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle2);
+    console.log('Block number of latest L2 output proposal:', blockNumberOfLatestL2OutputProposal);
+
+    console.log('Getting withdrawal L2 output index');
+    const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle2, BigInt(blockNumberOfLatestL2OutputProposal));
+    console.log('Withdrawal L2 output index:', withdrawalL2OutputIndex);
+
+    console.log('Getting withdrawal L2 output');
+    const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle2, withdrawalL2OutputIndex);
+    console.log('Withdrawal L2 output:', { outputRoot, timestamp, l2BlockNumber });
 
     const messageBedrockOutput = {
         outputRoot: outputRoot,
@@ -149,7 +183,7 @@ export async function getProveParameters (
         l2provider,
         L2_L1_MESSAGE_PASSER_ADDRESS,
         messageSlot,
-        blockNumberOfLatestL2OutputProposal
+        BigInt(blockNumberOfLatestL2OutputProposal)
     );
 
     const stateTrieProof = {

@@ -5,7 +5,7 @@ import * as hre from "hardhat";
 import { Contract } from "ethers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { getProveParameters, getWithdrawalMessage } from "./utils";
-import { l2ToL1MessagePasserABI, optimismPortalABI, l2OutputOracleABI, l2StandardBridgeABI, l2StandardBridgeAddress } from "@eth-optimism/contracts-ts";
+import { l2ToL1MessagePasserABI, optimismPortalABI, l2StandardBridgeABI, l2StandardBridgeAddress } from "@eth-optimism/contracts-ts";
 
 
 // Example configuration names: 'l1Network' and 'l2Network'
@@ -29,11 +29,11 @@ const StandardBridgeABI = [
     "event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData)"
 ];
 
-// const l2OutputOracleABI = [
-//     "function getL2OutputIndexAfter(uint256 _blockNumber) external view returns (uint256)",
-//     "function latestBlockNumber() external view returns (uint256)",
-//     "function getL2Output(uint256 _index) external view returns (bytes32, uint256, uint256)",
-// ];
+const l2OutputOracleABI = [
+    "function getL2OutputIndexAfter(uint256 _blockNumber) external view returns (uint256)",
+    "function latestBlockNumber() external view returns (uint256)",
+    "function getL2Output(uint256 _index) external view returns (bytes32, uint256, uint256)",
+];
 
 const OptimismPortalABI = [
     "event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to)",
@@ -180,7 +180,7 @@ describe("Withdraw ETH from L2", function () {
         expect(withdrawTxReceipt).to.not.be.undefined;
         const withdrawalMsg = getWithdrawalMessage(withdrawTxReceipt);
         console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
-        const bedrockProof = getProveParameters(l2OutputOracle, withdrawalMsg, l2Provider);
+        const bedrockProof = getProveParameters(l2OutputOracle, withdrawalMsg, l1Provider, l2Provider);
 
         console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, null, 2)}`);
 
