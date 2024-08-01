@@ -25,6 +25,9 @@ const config: HardhatUserConfig = {
       accounts: [process.env.TESTNET_PRIVATE_KEY || ""],
       url: "https://sepolia-01.astar.network/",
       chainId: 11155111,
+      forking: {
+        url: "https://sepolia-01.astar.network/",
+      }
     },
     osaki: {
       accounts: [process.env.TESTNET_PRIVATE_KEY || ""],

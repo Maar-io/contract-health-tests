@@ -11,10 +11,10 @@ export function bigintReplacer(key: string, value: any) {
 
 export async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Contract): Promise<bigint> {
 
-    console.log('Entering getBlockNumberOfLatestL2OutputProposal');
+    // console.log('Entering getBlockNumberOfLatestL2OutputProposal');
     try {
         const blockNumber: bigint = await l2OutputOracle.latestBlockNumber();
-        console.log('Block number retrieved:', blockNumber);
+        // console.log('Block number retrieved:', blockNumber);
         return blockNumber;
     } catch (error) {
         console.error('Error in getBlockNumberOfLatestL2OutputProposal:', error);
@@ -23,22 +23,22 @@ export async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Con
 }
 
 async function getWithdrawalL2OutputIndex(l2OutputOracle: Contract, blockNumber: bigint) {
-    console.log(`l2outputoracle: ${l2OutputOracle}`);
-    console.log(`getWithdrawalL2OutputIndex block number: ${blockNumber}`);
+    // console.log(`l2outputoracle: ${l2OutputOracle}`);
+    // console.log(`getWithdrawalL2OutputIndex block number: ${blockNumber}`);
     const L2OutputIndex = await l2OutputOracle.getL2OutputIndexAfter(blockNumber);
-    console.log(`L2 Output Index: ${L2OutputIndex}`);
+    // console.log(`L2 Output Index: ${L2OutputIndex}`);
     return L2OutputIndex;
 }
 
 async function getWithdrawalL2Output(l2OutputOracle: Contract, withdrawalL2OutputIndex: bigint) {
-    console.log(`getWithdrawalL2Output: ${withdrawalL2OutputIndex}`);
+    // console.log(`getWithdrawalL2Output: ${withdrawalL2OutputIndex}`);
     const l2Output = await l2OutputOracle.getL2Output(withdrawalL2OutputIndex);
-    console.log(`L2 Output: ${l2Output}`);
+    // console.log(`L2 Output: ${l2Output}`);
 
     const [outputBytes, timestamp, blockNumber] = l2Output;
-    console.log(`L2 Output Bytes: ${outputBytes}`);
-    console.log(`L2 Output Timestamp: ${timestamp}`);
-    console.log(`L2 Output Block Number: ${blockNumber}`);
+    // console.log(`L2 Output Bytes: ${outputBytes}`);
+    // console.log(`L2 Output Timestamp: ${timestamp}`);
+    // console.log(`L2 Output Block Number: ${blockNumber}`);
 
     // const iface = new ethers.Interface(l2OutputOracleABI);
     // const decodedOutput = iface.decodeFunctionResult("getL2Output", l2Output);
@@ -59,7 +59,7 @@ function decodeEventLog(eventLog: any) {
     }
 }
 
-export function getWithdrawalMessage(withdrawalReceipt: any): WithdrawalMsg {
+export async function getWithdrawalMessage(l2Provider: any, withdrawalReceipt: any): Promise<WithdrawalMsg> {
     let parsedWithdrawalLog: any;
 
     // Iterate over the logs and decode the relevant one
@@ -75,8 +75,11 @@ export function getWithdrawalMessage(withdrawalReceipt: any): WithdrawalMsg {
         throw new Error("Log with name 'MessagePassed' not found");
     }
 
+    // console.log(`withdrawalReceipt: ${JSON.stringify(withdrawalReceipt.hash, null, 2)}`);
+    const nonce = await getNonce(l2Provider, withdrawalReceipt.hash);
+
     const withdrawalMsg = {
-        nonce: parsedWithdrawalLog.args.nonce.toString(),
+        nonce,
         sender: parsedWithdrawalLog.args.sender,
         target: parsedWithdrawalLog.args.target,
         value: parsedWithdrawalLog.args.value.toString(),
@@ -109,7 +112,7 @@ async function getProof(provider: any, contract: Address, messageSlot: string, b
     if (!blockNumber.startsWith('0x')) {
         blockNumber = '0x' + blockNumber;
     }
-    console.log(`getProof for contract: ${contract}, messageSlot: ${messageSlot}, blockNumber: ${blockNumber}`);
+    // console.log(`getProof for contract: ${contract}, messageSlot: ${messageSlot}, blockNumber: ${blockNumber}`);
     const proof = await provider.send("eth_getProof", [
         contract,
         [messageSlot],
@@ -121,9 +124,9 @@ async function getProof(provider: any, contract: Address, messageSlot: string, b
 
 async function getBlockByNumber(provider: any, blockNumber: string) {
     // Convert blockNumber to a hexadecimal string
-    console.log(`getBlockByNumber for blockNumber: ${blockNumber}`);
+    // console.log(`getBlockByNumber for blockNumber: ${blockNumber}`);
     const blockNumberHex = `0x${parseInt(blockNumber, 10).toString(16)}`;
-    console.log(`getBlockByNumber for blockNumberHex: ${blockNumberHex}`);
+    // console.log(`getBlockByNumber for blockNumberHex: ${blockNumberHex}`);
 
     const block = await provider.send("eth_getBlockByNumber", [
         blockNumberHex,
@@ -133,13 +136,32 @@ async function getBlockByNumber(provider: any, blockNumber: string) {
     return block
 }
 
+async function getNonce(provider: any, txHash: string) {
+    if (!txHash || typeof txHash !== 'string') {
+        throw new Error('Invalid transaction hash');
+    }
+    try {
+        // Get the transaction details using the hash
+        const transaction = await provider.getTransaction(txHash);
+
+        // Extract the nonce
+        const nonce = transaction.nonce;
+        const hexNonce = `0x${nonce.toString(16)}`;
+        // console.log(`Nonce: ${hexNonce}`);
+        return hexNonce;
+    } catch (error) {
+        console.error('Error fetching transaction:', error);
+        throw error;
+    }
+}
+
 export async function getProveParameters(
     l2OutputOracle: Contract,
     withdrawalForTx: WithdrawalMsg,
     l1Provider: any,
     l2provider: any
 ) {
-    console.log(`getProveParameters for sender tx: ${withdrawalForTx.sender}`);
+    // console.log(`getProveParameters for sender tx: ${withdrawalForTx.sender}`);
     const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
     const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
     const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
@@ -152,7 +174,7 @@ export async function getProveParameters(
     };
 
     const hashedWithdrawal = hashWithdrawal(withdrawalForTx);
-    console.log(`Hashed Withdrawal: ${hashedWithdrawal}`);
+    // console.log(`Hashed Withdrawal: ${hashedWithdrawal}`);
     // Encode the ABI parameters
     const encodedParameters = ethers.AbiCoder.defaultAbiCoder().encode(
         ["bytes32", "uint256"],
@@ -160,7 +182,7 @@ export async function getProveParameters(
     );
     // Hash the encoded parameters
     const messageSlot = ethers.keccak256(encodedParameters);
-    console.log(`Message Slot: ${messageSlot}`);
+    // console.log(`Message Slot: ${messageSlot}`);
 
     // get proof for the message slot
     const blockNumberHex: string = '0x' + blockNumberOfLatestL2OutputProposal.toString(16);

@@ -35,11 +35,11 @@ const l2OutputOracleABI = [
     "function getL2Output(uint256 _index) external view returns (bytes32, uint256, uint256)",
 ];
 
-const OptimismPortalABI = [
-    "event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to)",
-    "function version() external view returns (string)",
-    "function proveWithdrawalTransaction(Types.WithdrawalTransaction memory _tx, uint256 _l2OutputIndex, Types.OutputRootProof calldata _outputRootProof,bytes[] calldata _withdrawalProof)"
-]
+// const optimismPortalABI = [
+//     "event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to)",
+//     "function version() external view returns (string)",
+//     "function proveWithdrawalTransaction(Types.WithdrawalTransaction memory _tx, uint256 _l2OutputIndex, Types.OutputRootProof calldata _outputRootProof,bytes[] calldata _withdrawalProof)"
+// ]
 const L2StandardBridgeABI = [
     "event DepositFinalized(address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes extraData)",
     "function version() external view returns (string)",
@@ -176,25 +176,15 @@ describe("Withdraw ETH from L2", function () {
         console.log(`Connected to L1 oracle contract: ${l2OutputOracle.target}`);
 
         expect(withdrawTxReceipt).to.not.be.undefined;
-        const withdrawalMsg = getWithdrawalMessage(withdrawTxReceipt);
+        const withdrawalMsg = await getWithdrawalMessage(l2Provider, withdrawTxReceipt);
         console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
         const bedrockProof = await getProveParameters(l2OutputOracle, withdrawalMsg, l1Provider, l2Provider);
 
         console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, bigintReplacer, 2)}`);
 
 
-        // const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
-        // const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
-        // const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
+ 
 
-        // const messageBedrockOutput = {
-        //     outputRoot: outputRoot,
-        //     l1Timestamp: timestamp,
-        //     l2BlockNumber: l2BlockNumber,
-        //     l2OutputIndex: withdrawalL2OutputIndex,
-        //   };
-
-        // const hashedWithdrawal = hashWithdrawal(WithdrawalMsg);
 
         // Call ProveWithdrawal function TODO
         // const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
