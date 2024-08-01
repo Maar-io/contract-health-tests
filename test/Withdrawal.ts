@@ -4,7 +4,7 @@ import { expect } from "chai";
 import * as hre from "hardhat";
 import { Contract } from "ethers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
-import { getProveParameters, getWithdrawalMessage } from "./utils";
+import { getProveParameters, getWithdrawalMessage, bigintReplacer } from "./utils";
 import { l2ToL1MessagePasserABI, optimismPortalABI, l2StandardBridgeABI, l2StandardBridgeAddress } from "@eth-optimism/contracts-ts";
 
 
@@ -63,7 +63,6 @@ function parseLogs(log: any) {
     );
 
     console.log(`Event Name: ${decodedEvent?.name}`);
-    console.log(`Event Args: ${JSON.stringify(args, null, 2)}`);
 }
 
 async function withdrawETHfromL2(user: any) {
@@ -74,7 +73,6 @@ async function withdrawETHfromL2(user: any) {
     const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, user);
     const tx = await bridgeL2.withdraw("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", AMOUNT, 0, "0x", { value: AMOUNT });
     await tx.wait();
-    // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
 
     // check deposit events on L1
     console.log(`Withdrawal Transaction on L2 hash: ${tx.hash}`);
@@ -108,7 +106,7 @@ async function pollForEvents(bridgeL2: Contract, userAddress: string) {
 
             // parse received events
             events.forEach((event) => {
-                console.log(`WithdrawalProven Event: ${JSON.stringify(event, null, 2)}`);
+                // console.log(`WithdrawalProven Event: ${JSON.stringify(event, null, 2)}`);
                 let toAddress = '0x' + event.data.substring(26, 66);
                 toAddress = toAddress.toLowerCase();
                 const amountHex = event.data.substring(66, 130);
@@ -175,14 +173,14 @@ describe("Withdraw ETH from L2", function () {
 
         // Contract details
         const l2OutputOracle = new hre.ethers.Contract(SepoliaL2OutputOracleProxy, l2OutputOracleABI, l1Provider);
-        console.log(`Connected to L1 bridge contract: ${l2OutputOracle.target}`);
+        console.log(`Connected to L1 oracle contract: ${l2OutputOracle.target}`);
 
         expect(withdrawTxReceipt).to.not.be.undefined;
         const withdrawalMsg = getWithdrawalMessage(withdrawTxReceipt);
         console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
-        const bedrockProof = getProveParameters(l2OutputOracle, withdrawalMsg, l1Provider, l2Provider);
+        const bedrockProof = await getProveParameters(l2OutputOracle, withdrawalMsg, l1Provider, l2Provider);
 
-        console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, null, 2)}`);
+        console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, bigintReplacer, 2)}`);
 
 
         // const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);

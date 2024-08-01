@@ -4,14 +4,16 @@ import { ethers, Contract, keccak256, AbiCoder, Log } from "ethers";
 export const L2_L1_MESSAGE_PASSER_ADDRESS = "0x4200000000000000000000000000000000000016";
 import { l2ToL1MessagePasserABI, optimismPortalABI, l2OutputOracleABI } from "@eth-optimism/contracts-ts";
 
+// Custom replacer function to handle BigInt serialization
+export function bigintReplacer(key: string, value: any) {
+    return typeof value === 'bigint' ? value.toString() : value;
+}
 
+export async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Contract): Promise<bigint> {
 
-async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Contract): Promise<number> {
-
-    console.log(`l2outputoracle: ${JSON.stringify(l2OutputOracle.address, null, 2)}`);
     console.log('Entering getBlockNumberOfLatestL2OutputProposal');
     try {
-        const blockNumber = await l2OutputOracle.latestBlockNumber();
+        const blockNumber: bigint = await l2OutputOracle.latestBlockNumber();
         console.log('Block number retrieved:', blockNumber);
         return blockNumber;
     } catch (error) {
@@ -20,7 +22,7 @@ async function getBlockNumberOfLatestL2OutputProposal(l2OutputOracle: Contract):
     }
 }
 
-async function getWithdrawalL2OutputIndex (l2OutputOracle: Contract, blockNumber: bigint) {
+async function getWithdrawalL2OutputIndex(l2OutputOracle: Contract, blockNumber: bigint) {
     console.log(`l2outputoracle: ${l2OutputOracle}`);
     console.log(`getWithdrawalL2OutputIndex block number: ${blockNumber}`);
     const L2OutputIndex = await l2OutputOracle.getL2OutputIndexAfter(blockNumber);
@@ -28,7 +30,7 @@ async function getWithdrawalL2OutputIndex (l2OutputOracle: Contract, blockNumber
     return L2OutputIndex;
 }
 
-async function getWithdrawalL2Output (l2OutputOracle: Contract, withdrawalL2OutputIndex: bigint) {
+async function getWithdrawalL2Output(l2OutputOracle: Contract, withdrawalL2OutputIndex: bigint) {
     console.log(`getWithdrawalL2Output: ${withdrawalL2OutputIndex}`);
     const l2Output = await l2OutputOracle.getL2Output(withdrawalL2OutputIndex);
     console.log(`L2 Output: ${l2Output}`);
@@ -38,12 +40,10 @@ async function getWithdrawalL2Output (l2OutputOracle: Contract, withdrawalL2Outp
     console.log(`L2 Output Timestamp: ${timestamp}`);
     console.log(`L2 Output Block Number: ${blockNumber}`);
 
-    // Assuming l2Output is a bytes array, you can decode it using ethers.js
-    const iface = new ethers.Interface(l2OutputOracleABI);
-    // const abiCoder = new AbiCoder();
-    const decodedOutput = iface.decodeFunctionResult("getL2Output", outputBytes);
+    // const iface = new ethers.Interface(l2OutputOracleABI);
+    // const decodedOutput = iface.decodeFunctionResult("getL2Output", l2Output);
+    // console.log(`Decoded L2 Output: ${decodedOutput}`);
 
-    console.log(`Decoded L2 Output: ${decodedOutput}`);
     return l2Output;
 }
 
@@ -54,14 +54,12 @@ function decodeEventLog(eventLog: any) {
         const parsedLog = iface.parseLog(eventLog);
         return parsedLog;
     } catch (error) {
-        console.error(`Failed to parse log: ${JSON.stringify(eventLog, (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value, 2)}`);
         console.error(error);
         return null;
     }
 }
 
-export function getWithdrawalMessage (withdrawalReceipt: any): WithdrawalMsg {
+export function getWithdrawalMessage(withdrawalReceipt: any): WithdrawalMsg {
     let parsedWithdrawalLog: any;
 
     // Iterate over the logs and decode the relevant one
@@ -90,8 +88,7 @@ export function getWithdrawalMessage (withdrawalReceipt: any): WithdrawalMsg {
 }
 
 
-export function hashWithdrawal (withdrawalMsg: WithdrawalMsg): Address {
-    console.log(`Hashing withdrawal: ${JSON.stringify(withdrawalMsg, null, 2)}`);
+export function hashWithdrawal(withdrawalMsg: WithdrawalMsg): Address {
     const abiCoder = new AbiCoder();
     const encoded = abiCoder.encode(
         ["uint256", "address", "address", "uint256", "uint256", "bytes"],
@@ -107,60 +104,45 @@ export function hashWithdrawal (withdrawalMsg: WithdrawalMsg): Address {
     return keccak256(encoded);
 }
 
-async function getProof (provider: any, contract: Address, messageSlot: string, blockNumber: bigint) {
+async function getProof(provider: any, contract: Address, messageSlot: string, blockNumber: string) {
     // Call the eth_getProof method
+    if (!blockNumber.startsWith('0x')) {
+        blockNumber = '0x' + blockNumber;
+    }
+    console.log(`getProof for contract: ${contract}, messageSlot: ${messageSlot}, blockNumber: ${blockNumber}`);
     const proof = await provider.send("eth_getProof", [
         contract,
         [messageSlot],
         blockNumber
     ]);
 
-    console.log(`Proof: ${JSON.stringify(proof, null, 2)}`);
     return proof
 }
 
-async function getBlockByNumber (provider: any, blockNumber: bigint) {
+async function getBlockByNumber(provider: any, blockNumber: string) {
     // Convert blockNumber to a hexadecimal string
-    const blockNumberHex = `0x${blockNumber.toString(16)}`;
+    console.log(`getBlockByNumber for blockNumber: ${blockNumber}`);
+    const blockNumberHex = `0x${parseInt(blockNumber, 10).toString(16)}`;
+    console.log(`getBlockByNumber for blockNumberHex: ${blockNumberHex}`);
 
     const block = await provider.send("eth_getBlockByNumber", [
-        blockNumberHex
+        blockNumberHex,
+        false
     ]);
 
-    console.log(`block: ${JSON.stringify(block, null, 2)}`);
     return block
 }
 
-export async function getProveParameters (
+export async function getProveParameters(
     l2OutputOracle: Contract,
     withdrawalForTx: WithdrawalMsg,
     l1Provider: any,
     l2provider: any
 ) {
-
-    const networkL1 = await l1Provider.getNetwork();
-    console.log(`Connected to L1 network: ${networkL1.chainId}`);
-    const SepoliaL2OutputOracleProxy = "0xBD56179F126b0fd54611Fb59FFc8230DE0210c38"; // Osaki related contract
-
-    // Contract details
-    const l2OutputOracle2 = new ethers.Contract(SepoliaL2OutputOracleProxy, l2OutputOracleABI, l1Provider);
-    console.log(`Connected to L1 bridge contract: ${l2OutputOracle.target}`);
-
-    // console.log(`getProveParameters for tx: ${JSON.stringify(withdrawalForTx.sender, null, 2)}`);
-    // const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
-    // const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
-    // const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
-    console.log('Getting block number of latest L2 output proposal');
-    const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle2);
-    console.log('Block number of latest L2 output proposal:', blockNumberOfLatestL2OutputProposal);
-
-    console.log('Getting withdrawal L2 output index');
-    const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle2, BigInt(blockNumberOfLatestL2OutputProposal));
-    console.log('Withdrawal L2 output index:', withdrawalL2OutputIndex);
-
-    console.log('Getting withdrawal L2 output');
-    const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle2, withdrawalL2OutputIndex);
-    console.log('Withdrawal L2 output:', { outputRoot, timestamp, l2BlockNumber });
+    console.log(`getProveParameters for sender tx: ${withdrawalForTx.sender}`);
+    const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
+    const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
+    const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
 
     const messageBedrockOutput = {
         outputRoot: outputRoot,
@@ -170,28 +152,31 @@ export async function getProveParameters (
     };
 
     const hashedWithdrawal = hashWithdrawal(withdrawalForTx);
+    console.log(`Hashed Withdrawal: ${hashedWithdrawal}`);
     // Encode the ABI parameters
     const encodedParameters = ethers.AbiCoder.defaultAbiCoder().encode(
         ["bytes32", "uint256"],
-        [hashedWithdrawal, BigInt(0)]
+        [hashedWithdrawal, 0]
     );
     // Hash the encoded parameters
     const messageSlot = ethers.keccak256(encodedParameters);
-
     console.log(`Message Slot: ${messageSlot}`);
+
+    // get proof for the message slot
+    const blockNumberHex: string = '0x' + blockNumberOfLatestL2OutputProposal.toString(16);
     const proof = await getProof(
         l2provider,
         L2_L1_MESSAGE_PASSER_ADDRESS,
-        messageSlot,
-        BigInt(blockNumberOfLatestL2OutputProposal)
+        messageSlot.toString(),
+        blockNumberHex
     );
-
     const stateTrieProof = {
         accountProof: proof.accountProof,
         storageProof: proof.storageProof[0].proof,
         storageValue: proof.storageProof[0].value,
         storageRoot: proof.storageHash,
     };
+    // console.log(`stateTrieProof Proof: ${JSON.stringify(stateTrieProof, null, 2)}`);
 
     const block = await getBlockByNumber(
         l2provider,
