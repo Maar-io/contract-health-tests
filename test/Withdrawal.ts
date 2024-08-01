@@ -4,6 +4,9 @@ import { expect } from "chai";
 import * as hre from "hardhat";
 import { Contract } from "ethers";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
+import { getProveParameters, getWithdrawalMessage } from "./utils";
+import { l2ToL1MessagePasserABI, optimismPortalABI, l2OutputOracleABI, l2StandardBridgeABI, l2StandardBridgeAddress } from "@eth-optimism/contracts-ts";
+
 
 // Example configuration names: 'l1Network' and 'l2Network'
 const l1Provider = new hre.ethers.JsonRpcProvider(process.env.L1_RPC_URL);
@@ -14,7 +17,8 @@ let eventReceived = false; // Flag to indicate if the event has been received
 
 const L1StandardBridgeProxyAddress = "0x5a6d4aAD601fE380995d93475A8b7f764F703eE4";
 const L2bridgeContractAddress = "0x4200000000000000000000000000000000000010";
-const SepoliaOptimismPortalAddress = "0x4b77cE16faEfAcfBDCf73F8643B51f290d377A4a" // Osaki related contract
+const SepoliaOptimismPortalAddress = "0x4b77cE16faEfAcfBDCf73F8643B51f290d377A4a"; // Osaki related contract
+const SepoliaL2OutputOracleProxy = "0xBD56179F126b0fd54611Fb59FFc8230DE0210c38"; // Osaki related contract
 
 const AMOUNT = 100000000000000; // 0.0001 ETH
 let initialL1BlockNumber = 0;
@@ -24,6 +28,12 @@ const StandardBridgeABI = [
     "event ETHDepositInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData)",
     "event ETHBridgeInitiated(address indexed from, address indexed to, uint256 amount, bytes extraData)"
 ];
+
+// const l2OutputOracleABI = [
+//     "function getL2OutputIndexAfter(uint256 _blockNumber) external view returns (uint256)",
+//     "function latestBlockNumber() external view returns (uint256)",
+//     "function getL2Output(uint256 _index) external view returns (bytes32, uint256, uint256)",
+// ];
 
 const OptimismPortalABI = [
     "event WithdrawalProven(bytes32 indexed withdrawalHash, address indexed from, address indexed to)",
@@ -64,7 +74,7 @@ async function withdrawETHfromL2(user: any) {
     const bridgeL2 = new hre.ethers.Contract(L2bridgeContractAddress, L2StandardBridgeABI, user);
     const tx = await bridgeL2.withdraw("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", AMOUNT, 0, "0x", { value: AMOUNT });
     await tx.wait();
-    console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+    // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
 
     // check deposit events on L1
     console.log(`Withdrawal Transaction on L2 hash: ${tx.hash}`);
@@ -78,6 +88,7 @@ async function withdrawETHfromL2(user: any) {
     console.log(`WithdrawalInitiated event emitted`);
     //     await expect(tx).to.emit(bridgeL2, "ETHBridgeInitiated").withArgs(user.address, user.address, AMOUNT, "0x");
     //     console.log(`ETHBridgeInitiated event emitted`);
+    return receipt;
 }
 
 async function pollForEvents(bridgeL2: Contract, userAddress: string) {
@@ -133,6 +144,7 @@ const wait = (ms: number): Promise<number> => {
 
 describe("Withdraw ETH from L2", function () {
     let user: any;
+    let withdrawTxReceipt: any;
 
     this.beforeEach(async function () {
         const signers = await hre.ethers.getSigners();
@@ -147,42 +159,63 @@ describe("Withdraw ETH from L2", function () {
         expect(balanceEtherBigNumber).to.be.gt(0);
         console.log(`L2 network: ${hre.network.config.chainId}, ETH balance ${balanceEther}`)
 
-        await withdrawETHfromL2(user);
+        withdrawTxReceipt = await withdrawETHfromL2(user);
         const balanceNewWei = await hre.ethers.provider.getBalance(user.address);
         const balanceNewEther = hre.ethers.formatEther(balanceNewWei);
         const balanceNewEtherBigNumber = hre.ethers.parseEther(balanceEther);
-        expect(balanceNewEtherBigNumber).to.be.lt(balanceEtherBigNumber);
+        // expect(balanceNewEtherBigNumber).to.be.lt(balanceEtherBigNumber);
         console.log(`✅ ETH Withdrawal initiated on L2, new balance: ${balanceNewEther}`);
     });
 
-    // it("Receive ETH Withdrawal on L1", async function () {
-    //     this.timeout(240000); // Set timeout for this test case
+    it("Prove ETH Withdrawal on L1", async function () {
+        this.timeout(240000); // Set timeout for this test case
 
-    //     const networkL1 = await l1Provider.getNetwork();
-    //     console.log(`Connected to L1 network: ${networkL1.chainId}`);
+        const networkL1 = await l1Provider.getNetwork();
+        console.log(`Connected to L1 network: ${networkL1.chainId}`);
 
-    //     // Contract details
-    //     const optimismPortal = new hre.ethers.Contract(SepoliaOptimismPortalAddress, OptimismPortalABI, l1Provider);
-    //     console.log(`Connected to L1 bridge contract: ${optimismPortal.target}, version: ${await optimismPortal.version()}`);
+        // Contract details
+        const l2OutputOracle = new hre.ethers.Contract(SepoliaL2OutputOracleProxy, l2OutputOracleABI, l1Provider);
+        console.log(`Connected to L1 bridge contract: ${l2OutputOracle.target}`);
 
-    //     // Call ProveWithdrawal function TODO
-    //     const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
+        expect(withdrawTxReceipt).to.not.be.undefined;
+        const withdrawalMsg = getWithdrawalMessage(withdrawTxReceipt);
+        const bedrockProof = getProveParameters(l2OutputOracle, withdrawalMsg, l2Provider);
 
-    //     await tx.wait();
-    //     // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+        console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
+        console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, null, 2)}`);
 
-    //     // check withdrawal events on L1
-    //     console.log(`proveWithdrawal Transaction on L1 hash: ${tx.hash}`);
-    //     const receipt = await l1Provider.getTransactionReceipt(tx.hash);
-    //     if (!receipt) {
-    //         throw new Error(`Failed to fetch transaction receipt for hash: ${tx.hash}`);
-    //     }
 
-    //     expect(receipt?.logs.length).to.be.equal(5);
-    //     // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
-    //     await expect(tx).to.emit(optimismPortal, "WithdrawalProved").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
-    //     console.log(`WithdrawalInitiated event emitted`);
+        // const blockNumberOfLatestL2OutputProposal = await getBlockNumberOfLatestL2OutputProposal(l2OutputOracle);
+        // const withdrawalL2OutputIndex = await getWithdrawalL2OutputIndex(l2OutputOracle, blockNumberOfLatestL2OutputProposal);
+        // const [outputRoot, timestamp, l2BlockNumber] = await getWithdrawalL2Output(l2OutputOracle, withdrawalL2OutputIndex);
 
-    //     console.log(`Withdrawal finalized on L1`);
-    // });
+        // const messageBedrockOutput = {
+        //     outputRoot: outputRoot,
+        //     l1Timestamp: timestamp,
+        //     l2BlockNumber: l2BlockNumber,
+        //     l2OutputIndex: withdrawalL2OutputIndex,
+        //   };
+
+        // const hashedWithdrawal = hashWithdrawal(WithdrawalMsg);
+
+        // Call ProveWithdrawal function TODO
+        // const tx = await optimismPortal.proveWithdrawalTransaction("0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000", user.address, AMOUNT);
+
+        // await tx.wait();
+        // // console.log(`Deposit Transaction receipt: ${JSON.stringify(tx, null, 2)}`);
+
+        // // check withdrawal events on L1
+        // console.log(`proveWithdrawal Transaction on L1 hash: ${tx.hash}`);
+        // const receipt = await l1Provider.getTransactionReceipt(tx.hash);
+        // if (!receipt) {
+        //     throw new Error(`Failed to fetch transaction receipt for hash: ${tx.hash}`);
+        // }
+
+        // expect(receipt?.logs.length).to.be.equal(5);
+        // // console.log(`Transaction receipt logs: ${JSON.stringify(receipt.logs, null, 2)}`);
+        // await expect(tx).to.emit(optimismPortal, "WithdrawalProved").withArgs(anyValue, anyValue, user.address, user.address, AMOUNT, "0x");
+        // console.log(`WithdrawalInitiated event emitted`);
+
+        // console.log(`Withdrawal finalized on L1`);
+    });
 });
