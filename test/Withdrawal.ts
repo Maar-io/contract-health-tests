@@ -179,9 +179,9 @@ describe("Withdraw ETH from L2", function () {
 
         expect(withdrawTxReceipt).to.not.be.undefined;
         const withdrawalMsg = getWithdrawalMessage(withdrawTxReceipt);
+        console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
         const bedrockProof = getProveParameters(l2OutputOracle, withdrawalMsg, l2Provider);
 
-        console.log(`Withdrawal Message: ${JSON.stringify(withdrawalMsg, null, 2)}`);
         console.log(`Bedrock Proof: ${JSON.stringify(bedrockProof, null, 2)}`);
 
 

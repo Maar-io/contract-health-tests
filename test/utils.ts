@@ -1,5 +1,5 @@
 import type { BedRockCrossChainMessageProof, WithdrawalMsg, Address } from "./types";
-import { ethers, Contract, keccak256, AbiCoder } from "ethers";
+import { ethers, Contract, keccak256, AbiCoder, Log } from "ethers";
 
 export const L2_L1_MESSAGE_PASSER_ADDRESS = "0x4200000000000000000000000000000000000016";
 import { l2ToL1MessagePasserABI, optimismPortalABI, l2OutputOracleABI } from "@eth-optimism/contracts-ts";
@@ -35,48 +35,51 @@ async function getWithdrawalL2Output (l2OutputOracle: Contract, withdrawalL2Outp
     return l2Output;
 }
 
-function decodeEventLog (eventLog: any) {
-    console.log(`Decoding event log: ${eventLog}`);
-    const parsedLog = {
-        eventName: "MessagePassed",
-        nonce: eventLog.args.nonce,
-        sender: eventLog.args.sender,
-        target: eventLog.args.target,
-        value: eventLog.args.value,
-        gasLimit: eventLog.args.gasLimit,
-        data: eventLog.args.data,
-    };
-    console.log(`Decoded event log: ${parsedLog}`);
-    return parsedLog;
+function decodeEventLog(eventLog: any) {
+    const iface = new ethers.Interface(l2ToL1MessagePasserABI);
+
+    try {
+        const parsedLog = iface.parseLog(eventLog);
+        return parsedLog;
+    } catch (error) {
+        console.error(`Failed to parse log: ${JSON.stringify(eventLog, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value, 2)}`);
+        console.error(error);
+        return null;
+    }
 }
 
 export function getWithdrawalMessage (withdrawalReceipt: any): WithdrawalMsg {
     let parsedWithdrawalLog: any;
-    const messageLog = withdrawalReceipt.logs.map((log: any) => {
-        if (log.address === L2_L1_MESSAGE_PASSER_ADDRESS) {
-            parsedWithdrawalLog = decodeEventLog(log);
-            return;
+
+    // Iterate over the logs and decode the relevant one
+    withdrawalReceipt.logs.forEach((log: any) => {
+        const decodedLog = decodeEventLog(log);
+        if (decodedLog?.name === "MessagePassed") {
+            parsedWithdrawalLog = decodedLog;
         }
     });
 
-    if (!messageLog) {
-        throw new Error("Log not found");
+    // Check if the parsed log was found
+    if (!parsedWithdrawalLog) {
+        throw new Error("Log with name 'MessagePassed' not found");
     }
 
-    const WithdrawalMsg = {
-        nonce: parsedWithdrawalLog.args.nonce,
+    const withdrawalMsg = {
+        nonce: parsedWithdrawalLog.args.nonce.toString(),
         sender: parsedWithdrawalLog.args.sender,
         target: parsedWithdrawalLog.args.target,
-        value: parsedWithdrawalLog.args.value,
-        gasLimit: parsedWithdrawalLog.args.gasLimit,
+        value: parsedWithdrawalLog.args.value.toString(),
+        gasLimit: parsedWithdrawalLog.args.gasLimit.toString(),
         data: parsedWithdrawalLog.args.data,
     };
 
-    return WithdrawalMsg;
+    return withdrawalMsg;
 }
 
 
 export function hashWithdrawal (withdrawalMsg: WithdrawalMsg): Address {
+    console.log(`Hashing withdrawal: ${JSON.stringify(withdrawalMsg, null, 2)}`);
     const abiCoder = new AbiCoder();
     const encoded = abiCoder.encode(
         ["uint256", "address", "address", "uint256", "uint256", "bytes"],
@@ -159,18 +162,18 @@ export async function getProveParameters (
     const block = await getBlockByNumber(
         l2provider,
         messageBedrockOutput.l2BlockNumber,
-      );
+    );
 
-      const bedrockProof: BedRockCrossChainMessageProof = {
+    const bedrockProof: BedRockCrossChainMessageProof = {
         outputRootProof: {
-          version: "0x0",
-          stateRoot: block.stateRoot,
-          messagePasserStorageRoot: stateTrieProof.storageRoot,
-          latestBlockhash: block.hash,
+            version: "0x0",
+            stateRoot: block.stateRoot,
+            messagePasserStorageRoot: stateTrieProof.storageRoot,
+            latestBlockhash: block.hash,
         },
         withdrawalProof: stateTrieProof.storageProof,
         l2OutputIndex: messageBedrockOutput.l2OutputIndex,
-      };
+    };
 
 
     return {
