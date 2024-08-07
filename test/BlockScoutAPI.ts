@@ -39,10 +39,10 @@ describe('Blockscout REST API', function () {
                     'accept': 'application/json',
                 },
             });
-            console.log(`✅ Got transaction details`);
 
             expect(response.data).to.not.be.empty;
             expect(response.data).to.have.property('hash', transactionHash);
+            console.log(`✅ Got transaction details`);
         } catch (error: any) {
             console.log(`Caught error: ${error.toString()}`);
             expect.fail(`Unexpected error: ${error.message}`);
@@ -56,14 +56,33 @@ describe('Blockscout REST API', function () {
                     'accept': 'application/json',
                 },
             });
-            console.log(`✅ Got gas price oracle values: ${JSON.stringify(response.data)}`);
 
             expect(response.data).to.not.be.empty;
             expect(response.data).to.have.property('slow').that.is.not.oneOf([0, null]);
             expect(response.data).to.have.property('average').that.is.not.oneOf([0, null]);
             expect(response.data).to.have.property('fast').that.is.not.oneOf([0, null]);
+            console.log(`✅ Got gas price oracle values: ${JSON.stringify(response.data)}`);
         } catch (error: any) {
             console.log(`🔴 Caught error: ${error.toString()}`);
+            expect.fail(`Unexpected error: ${error.message}`);
+        }
+    });
+
+    it('should return a block with 2 transactions', async () => {
+        const blockNumber = 1228994;
+        try {
+            const response = await axios.get(BLOCKSCOUT_REST_API + `blocks/${blockNumber}`, {
+                headers: {
+                    'accept': 'application/json',
+                },
+            });
+
+            expect(response.data).to.not.be.empty;
+            expect(response.data).to.have.property('tx_count');
+            expect(response.data.tx_count).to.be.equal(2);
+            console.log(`✅ Got block details`);
+        } catch (error: any) {
+            console.log(`Caught error: ${error.toString()}`);
             expect.fail(`Unexpected error: ${error.message}`);
         }
     });
