@@ -48,4 +48,23 @@ describe('Blockscout REST API', function () {
             expect.fail(`Unexpected error: ${error.message}`);
         }
     });
+    it('should return valid gas price oracle values', async () => {
+        const gasPriceOracleUrl = "https://osaki-explorer.startale.com/api/v1/gas-price-oracle";
+        try {
+            const response = await axios.get(gasPriceOracleUrl, {
+                headers: {
+                    'accept': 'application/json',
+                },
+            });
+            console.log(`✅ Got gas price oracle values: ${JSON.stringify(response.data)}`);
+
+            expect(response.data).to.not.be.empty;
+            expect(response.data).to.have.property('slow').that.is.not.oneOf([0, null]);
+            expect(response.data).to.have.property('average').that.is.not.oneOf([0, null]);
+            expect(response.data).to.have.property('fast').that.is.not.oneOf([0, null]);
+        } catch (error: any) {
+            console.log(`🔴 Caught error: ${error.toString()}`);
+            expect.fail(`Unexpected error: ${error.message}`);
+        }
+    });
 });
