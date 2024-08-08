@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { expect } from 'chai';
 import * as hre from "hardhat";
-let BLOCKSCOUT_REST_API = "https://osaki-explorer.startale.com/api/v2/";
+const BLOCKSCOUT_REST_API = "https://osaki-explorer.startale.com/api/v2/";
+const BLOCK_NUMBER = 1228994;
+const TRANSACTION_HASH = "0xd34244b9d641f85e5047b70b30ce06ac619b0904ea2e699e808af52a72ba4c1e";
 
 interface Payload {
     jsonrpc: string;
@@ -11,28 +13,26 @@ interface Payload {
 }
 
 describe('Blockscout REST API', function () {
-    describe('Blockscout REST API', function () {
-        it('should return the statistics', async () => {
+    it('should return the statistics', async () => {
 
-            try {
-                const response = await axios.get(BLOCKSCOUT_REST_API + "stats", {
-                    headers: {
-                        'accept': 'application/json',
-                    },
-                });
-                console.log(`✅ Got statistics`);
+        try {
+            const response = await axios.get(BLOCKSCOUT_REST_API + "stats", {
+                headers: {
+                    'accept': 'application/json',
+                },
+            });
+            console.log(`✅ Got statistics ${JSON.stringify(response.data.gas_prices)}`);
 
-                expect(response.data).to.not.be.empty;
-                expect(response.data).to.have.property('gas_prices');
-            } catch (error: any) {
-                console.log(`Caught error: ${error.toString()}`);
-                expect.fail(`Unexpected error: ${error.message}`);
-            }
-        });
+            expect(response.data).to.not.be.empty;
+            expect(response.data).to.have.property('gas_prices');
+        } catch (error: any) {
+            console.log(`Caught error: ${error.toString()}`);
+            expect.fail(`Unexpected error: ${error.message}`);
+        }
     });
 
     it('should return the transaction details', async () => {
-        const transactionHash = "0xd34244b9d641f85e5047b70b30ce06ac619b0904ea2e699e808af52a72ba4c1e";
+        const transactionHash = TRANSACTION_HASH;
         try {
             const response = await axios.get(BLOCKSCOUT_REST_API + `transactions/${transactionHash}`, {
                 headers: {
@@ -48,6 +48,7 @@ describe('Blockscout REST API', function () {
             expect.fail(`Unexpected error: ${error.message}`);
         }
     });
+
     it('should return valid gas price oracle values', async () => {
         const gasPriceOracleUrl = "https://osaki-explorer.startale.com/api/v1/gas-price-oracle";
         try {
@@ -69,9 +70,8 @@ describe('Blockscout REST API', function () {
     });
 
     it('should return a block with 2 transactions', async () => {
-        const blockNumber = 1228994;
         try {
-            const response = await axios.get(BLOCKSCOUT_REST_API + `blocks/${blockNumber}`, {
+            const response = await axios.get(BLOCKSCOUT_REST_API + `blocks/${BLOCK_NUMBER}`, {
                 headers: {
                     'accept': 'application/json',
                 },
