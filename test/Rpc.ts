@@ -254,8 +254,3 @@ describe('Ethereum RPC Node - HTTP errors 4xx', function () {
     // });
 });
 
-
-
-curl -X POST "http://rpc.stg.hypersonicl2.com/%" \
-     -d "this is not a valid JSON string" \
-     -H "Content-Type: application/json; charset=invalid"

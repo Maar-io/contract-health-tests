@@ -21,10 +21,9 @@ describe('Blockscout REST API', function () {
                     'accept': 'application/json',
                 },
             });
-            console.log(`✅ Got statistics ${JSON.stringify(response.data.gas_prices)}`);
-
             expect(response.data).to.not.be.empty;
             expect(response.data).to.have.property('gas_prices');
+            console.log(`✅ Got statistics details`);
         } catch (error: any) {
             console.log(`Caught error: ${error.toString()}`);
             expect.fail(`Unexpected error: ${error.message}`);
